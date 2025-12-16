@@ -1,0 +1,94 @@
+name: Build and Release App
+
+# 触发条件：当你推送 v* 标签时 (例如 v1.0.0)
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  # =================================================
+  # 任务 1: 编译 Android APK
+  # =================================================
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          
+      - name: Get Dependencies
+        run: flutter pub get
+
+      # 解码 Keystore 文件
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
+      
+      # 创建 key.properties 让 Gradle 读取
+      - name: Create key.properties
+        run: |
+          echo "storePassword=${{ secrets.KEY_PASSWORD }}" > android/key.properties
+          echo "keyPassword=${{ secrets.ALIAS_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+          echo "storeFile=upload-keystore.jks" >> android/key.properties
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      # 上传到 GitHub Release
+      - name: Upload APK to Release
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifacts: "build/app/outputs/flutter-apk/app-release.apk"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: "Auto-generated release for Android."
+
+  # =================================================
+  # 任务 2: 编译 Windows EXE
+  # =================================================
+  build-windows:
+    runs-on: windows-latest  # 必须用 Windows 环境
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      # Windows 编译出来是一个文件夹，需要打包成 zip
+      - name: Archive Windows Release
+        uses: thedoctor0/zip-release@0.7.1
+        with:
+          type: 'zip'
+          filename: 'windows-release.zip'
+          directory: 'build/windows/runner/Release' # 这里是 Flutter 默认输出路径
+
+      # 上传到 GitHub Release
+      - name: Upload Windows Zip to Release
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true # 允许合并更新（和上面的 Android 任务共用一个 Release）
+          artifacts: "build/windows/runner/Release/windows-release.zip"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
