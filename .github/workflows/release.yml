@@ -61,7 +61,7 @@ jobs:
   # 任务 2: 编译 Windows EXE
   # =================================================
   build-windows:
-    runs-on: windows-latest  # 必须用 Windows 环境
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v3
 
@@ -76,20 +76,22 @@ jobs:
       - name: Build Windows
         run: flutter build windows --release
 
-      # Windows 编译出来是一个文件夹，需要打包成 zip
+      # 打包成 zip
       - name: Archive Windows Release
         uses: thedoctor0/zip-release@0.7.1
         with:
           type: 'zip'
           filename: 'windows-release.zip'
-          directory: 'build/windows/runner/Release' # 这里是 Flutter 默认输出路径
+          # 【修改点 1】加上 /x64/
+          directory: 'build/windows/x64/runner/Release' 
 
       # 上传到 GitHub Release
       - name: Upload Windows Zip to Release
         uses: ncipollo/release-action@v1
         with:
-          allowUpdates: true # 允许合并更新（和上面的 Android 任务共用一个 Release）
-          artifacts: "build/windows/runner/Release/windows-release.zip"
+          allowUpdates: true
+          # 【修改点 2】这里的路径也要加上 /x64/，因为 zip 生成在上面的目录里
+          artifacts: "build/windows/x64/runner/Release/windows-release.zip"
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
