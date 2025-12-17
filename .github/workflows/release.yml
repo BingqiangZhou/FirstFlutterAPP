@@ -1,4 +1,4 @@
-# GitHub Actions 工作流：Flutter 多平台自动构建
+# GitHub Actions 工作流：Flutter 多平台自动构建和发布
 name: Build and Release App
 
 # 触发条件：当推送版本标签时或手动触发
@@ -11,14 +11,23 @@ on:
 # 权限设置：必须授予 contents: write 权限才能创建 Release
 permissions:
   contents: write
+  releases: write
+
+# 全局环境变量
+env:
+  # Flutter 版本将通过 channel 自动获取最新稳定版本
 
 jobs:
   # ========================
-  # Android 平台构建任务
+  # 并行构建所有平台
   # ========================
+
   build-android:
-    # 使用 Ubuntu 虚拟环境
-    runs-on: ubuntu-latest
+    name: Build Android
+    runs-on: ubuntu-latest  # 使用 Ubuntu 环境构建 Android
+    outputs:
+      # 输出构建信息（可选，用于调试）
+      artifact-name: android-apk
 
     steps:
       # 1. 检出代码：获取仓库的源代码
@@ -29,143 +38,137 @@ jobs:
       - name: Setup Java environment
         uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'  # 使用 Eclipse Temurin JDK
-          java-version: '17'       # Java 版本
+          distribution: 'temurin'  # 使用 Eclipse Temurin JDK（AdoptOpenJDK 的分支）
+          java-version: '17'       # Flutter 3.x 需要 Java 17
 
-      # 3. 设置 Flutter 环境：安装 Flutter SDK
+      # 3. 缓存 Gradle 依赖：加速 Android 构建
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # 4. 缓存 Flutter 依赖：加速构建
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.pub-cache
+            /opt/hostedtoolcache/Flutter
+          key: ${{ runner.os }}-flutter-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-
+
+      # 5. 设置 Flutter 环境：安装 Flutter SDK
       - name: Setup Flutter environment
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'  # 使用稳定版本的 Flutter
+          channel: 'stable'  # 使用最新稳定版本的 Flutter
+          cache: true  # 启用 Flutter 缓存
 
-      # 4. 获取项目依赖：运行 flutter pub get 下载依赖包
+      # 6. 获取项目依赖：运行 flutter pub get 下载依赖包
       - name: Get Flutter dependencies
         run: flutter pub get
 
-      # 5. [可选] 解码 Android 签名密钥（用于发布签名版本）
-      # 如果需要发布签名的 APK，需要先配置 GitHub Secrets
+      # 7. [可选] 解码 Android 签名密钥（用于发布签名版本）
+      # 如果需要发布签名的 APK，需要先配置 GitHub Secrets：
+      # - ANDROID_KEYSTORE_BASE64: keystore 文件的 base64 编码
+      # - KEY_PASSWORD: keystore 密码
+      # - ALIAS_PASSWORD: alias 密码
+      # - KEY_ALIAS: 密钥别名
       - name: Decode Android keystore (if configured)
         run: |
           if [ "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" != "" ]; then
+            echo "📱 Android keystore found, setting up signing configuration"
             echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
             echo "storePassword=${{ secrets.KEY_PASSWORD }}" > android/key.properties
             echo "keyPassword=${{ secrets.ALIAS_PASSWORD }}" >> android/key.properties
             echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
             echo "storeFile=upload-keystore.jks" >> android/key.properties
+          else
+            echo "📱 No Android keystore configured, building unsigned APK"
           fi
 
-      # 6. 构建 Android APK：生成发布版本的 Android 安装包
+      # 8. 构建 Android APK：生成发布版本的 Android 安装包
       - name: Build Android APK
-        run: flutter build apk --release
+        run: |
+          echo "🔨 Building Android APK..."
+          flutter build apk --release
+          echo "✅ Android APK build completed"
 
-      # 7. 上传 APK 到 GitHub Release：将构建产物上传到 Releases 页面
-      - name: Upload APK to GitHub Release
-        uses: ncipollo/release-action@v1
+      # 9. 上传构建产物：将 APK 上传为 Artifacts，供 Release 任务使用
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
         with:
-          allowUpdates: true  # 允许更新已存在的 Release
-          artifacts: "build/app/outputs/flutter-apk/app-release.apk"  # APK 文件路径
-          token: ${{ secrets.GITHUB_TOKEN }}  # 使用 GitHub 提供的 token
-          tag: ${{ github.ref_name }}  # 使用推送的标签名
-          name: Release ${{ github.ref_name }}  # Release 标题
-          body: |
-            ## Flutter 2048 Game ${{ github.ref_name }}
+          name: android-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7  # 保留7天，足够完成 Release 流程
 
-            🎮 一个使用 Flutter 开发的经典 2048 数字游戏
-
-            ### 📱 支持平台
-            - ✅ Android (APK)
-            - ✅ Windows (Windows x64)
-            - ✅ Linux (Linux x64)
-            - ✅ macOS (macOS Universal)
-            - ✅ Web (浏览器)
-
-            ### 📥 安装说明
-
-            **Android:**
-            - 下载 `app-release.apk` 文件
-            - 在 Android 设备上安装并运行
-
-            **Windows:**
-            - 下载 `flutter-2048-windows.zip`
-            - 解压缩并运行 `flutter_2048_game.exe`
-
-            **Linux:**
-            - 下载 `flutter-2048-linux.zip`
-            - 解压缩并运行 `flutter_2048_game`
-
-            **macOS:**
-            - 下载 `flutter-2048-macos.zip`
-            - 解压缩并运行 `Flutter 2048 Game.app`
-
-            **Web:**
-            - 访问 [在线演示](#) (暂未部署 Web 版本)
-
-            ### 🎯 游戏特色
-            - ⌨️ 支持键盘方向键控制
-            - 📱 支持触摸滑动手势
-            - 🏆 分数统计和最高分记录
-            - 🎨 响应式设计，适配各种屏幕
-
-            ### 🔧 技术栈
-            - Flutter ${{ env.FLUTTER_VERSION || '3.x' }}
-            - Dart
-            - Platform Channel Support
-
-            ---
-            📅 构建时间: ${{ github.event.head_commit.timestamp }}
-            🌟 版本: ${{ github.ref_name }}
-            📦 构建产物: Android APK
-
-  # ========================
-  # Windows 平台构建任务
-  # ========================
   build-windows:
-    # 必须使用 Windows 虚拟环境
-    runs-on: windows-latest
+    name: Build Windows
+    runs-on: windows-latest  # 必须使用 Windows 环境
+    outputs:
+      artifact-name: windows-zip
 
     steps:
       # 1. 检出代码
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2. 设置 Flutter 环境
+      # 2. 缓存 Flutter 依赖
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            C:\Users\runneradmin\.pub-cache
+            D:\a\_tool\Flutter
+          key: ${{ runner.os }}-flutter-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-
+
+      # 3. 设置 Flutter 环境
       - name: Setup Flutter environment
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: 'stable'  # 使用最新稳定版本
+          cache: true  # 启用 Flutter 缓存
 
-      # 3. 获取依赖
+      # 4. 获取依赖
       - name: Get Flutter dependencies
         run: flutter pub get
 
-      # 4. 构建 Windows 应用：生成 Windows 桌面应用
+      # 5. 构建 Windows 应用：生成 Windows 桌面应用
       - name: Build Windows application
-        run: flutter build windows --release
+        run: |
+          echo "🔨 Building Windows application..."
+          flutter build windows --release
+          echo "✅ Windows application build completed"
 
-      # 5. 打包 Windows 应用：将生成的可执行文件打包成 ZIP
+      # 6. 打包 Windows 应用：将生成的可执行文件打包成 ZIP
       - name: Archive Windows release
         uses: thedoctor0/zip-release@0.7.1
         with:
           type: 'zip'
-          filename: 'flutter-2048-windows.zip'  # ZIP 文件名
+          filename: 'flutter-2048-windows.zip'
           directory: 'build/windows/x64/runner/Release'  # Windows 构建输出目录
 
-      # 6. 上传 ZIP 到 GitHub Release
-      - name: Upload Windows ZIP to GitHub Release
-        uses: ncipollo/release-action@v1
+      # 7. 上传构建产物
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
         with:
-          allowUpdates: true
-          artifacts: "build/windows/x64/runner/Release/flutter-2048-windows.zip"
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
+          name: windows-zip
+          path: build/windows/x64/runner/Release/flutter-2048-windows.zip
+          retention-days: 7
 
-  # ========================
-  # Linux 平台构建任务
-  # ========================
   build-linux:
-    # 使用 Ubuntu 虚拟环境
-    runs-on: ubuntu-latest
+    name: Build Linux
+    runs-on: ubuntu-latest  # 使用 Ubuntu 环境
+    outputs:
+      artifact-name: linux-zip
 
     steps:
       # 1. 检出代码
@@ -175,40 +178,57 @@ jobs:
       # 2. 安装 Linux 构建依赖：Flutter Linux 桌面应用需要的系统库
       - name: Install Linux build dependencies
         run: |
+          echo "📦 Installing Linux dependencies for Flutter desktop..."
           sudo apt-get update
           sudo apt-get install -y \
-            clang \
-            cmake \
-            ninja-build \
-            pkg-config \
-            libgtk-3-dev \
-            libglib2.0-dev \
-            libpango1.0-dev \
-            libatk1.0-dev \
-            libcairo-gobject2 \
-            libgdk-pixbuf2.0-dev \
-            libgraphene-1.0-dev \
-            libharfbuzz-dev
+            clang \              # C++ 编译器，Flutter 需要它来编译原生代码
+            cmake \              # 构建系统
+            ninja-build \        # 快速构建工具
+            pkg-config \         # 包配置工具，用于查找库文件
+            libgtk-3-dev \       # GTK 3 开发库，用于 Linux GUI
+            libglib2.0-dev \     # GLib 库，GTK 的核心库
+            libpango1.0-dev \    # Pango 文本布局库
+            libatk1.0-dev \      # ATK 可访问性工具包
+            libcairo-gobject2 \  # Cairo 图形库
+            libgdk-pixbuf2.0-dev \  # GDK Pixbuf 库，用于图像处理
+            libgraphene-1.0-dev \   # Graphene 图形库
+            libharfbuzz-dev      # HarfBuzz 文本整形库
+          echo "✅ Linux dependencies installed"
 
-      # 3. 设置 Flutter 环境
+      # 3. 缓存 Flutter 依赖
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.pub-cache
+            /opt/hostedtoolcache/Flutter
+          key: ${{ runner.os }}-flutter-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-
+
+      # 4. 设置 Flutter 环境
       - name: Setup Flutter environment
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: 'stable'  # 使用最新稳定版本
+          cache: true  # 启用 Flutter 缓存
 
-      # 4. 获取依赖
+      # 5. 获取依赖
       - name: Get Flutter dependencies
         run: flutter pub get
 
-      # 5. 启用 Linux 桌面支持
+      # 6. 启用 Linux 桌面支持：Flutter 默认不启用桌面支持
       - name: Enable Linux desktop support
         run: flutter config --enable-linux-desktop
 
-      # 6. 构建 Linux 应用
+      # 7. 构建 Linux 应用
       - name: Build Linux application
-        run: flutter build linux --release
+        run: |
+          echo "🔨 Building Linux application..."
+          flutter build linux --release
+          echo "✅ Linux application build completed"
 
-      # 7. 打包 Linux 应用
+      # 8. 打包 Linux 应用
       - name: Archive Linux release
         uses: thedoctor0/zip-release@0.7.1
         with:
@@ -216,47 +236,86 @@ jobs:
           filename: 'flutter-2048-linux.zip'
           directory: 'build/linux/x64/release/bundle'  # Linux 构建输出目录
 
-      # 8. 上传 ZIP 到 GitHub Release
-      - name: Upload Linux ZIP to GitHub Release
-        uses: ncipollo/release-action@v1
+      # 9. 上传构建产物
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
         with:
-          allowUpdates: true
-          artifacts: "build/linux/x64/release/bundle/flutter-2048-linux.zip"
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
+          name: linux-zip
+          path: build/linux/x64/release/bundle/flutter-2048-linux.zip
+          retention-days: 7
 
-  # ========================
-  # macOS 平台构建任务
-  # ========================
   build-macos:
-    # 必须使用 macOS 虚拟环境
-    runs-on: macos-latest
+    name: Build macOS
+    runs-on: macos-latest  # 必须使用 macOS 环境
+    outputs:
+      artifact-name: macos-zip
 
     steps:
       # 1. 检出代码
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2. 设置 Flutter 环境
+      # 2. 缓存 Flutter 依赖
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.pub-cache
+            /Users/runner/hostedtoolcache/Flutter
+          key: ${{ runner.os }}-flutter-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-
+
+      # 3. 设置 Flutter 环境
       - name: Setup Flutter environment
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: 'stable'  # 使用最新稳定版本
+          cache: true  # 启用 Flutter 缓存
 
-      # 3. 获取依赖
+      # 4. 获取依赖
       - name: Get Flutter dependencies
         run: flutter pub get
 
-      # 4. 启用 macOS 桌面支持
+      # 5. 启用 macOS 桌面支持
       - name: Enable macOS desktop support
         run: flutter config --enable-macos-desktop
 
-      # 5. 构建 macOS 应用
-      - name: Build macOS application
-        run: flutter build macos --release
+      # 6. [可选] macOS 代码签名 - 需要配置 Apple Developer 证书
+      # 配置 GitHub Secrets：
+      # - APPLE_CERTIFICATE_BASE64: P12 证书的 base64 编码
+      # - APPLE_CERTIFICATE_PASSWORD: P12 证书密码
+      # - PROVISIONING_PROFILE_BASE64: Provisioning Profile 的 base64 编码
+      - name: Import Code-Signing Certificates
+        if: ${{ secrets.APPLE_CERTIFICATE_BASE64 != '' }}
+        uses: Apple-Actions/import-codesign-certs@v1
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
 
-      # 6. 打包 macOS 应用：.app 包本质是文件夹，需要打包成 ZIP
+      - name: Install the Provisioning Profile
+        if: ${{ secrets.PROVISIONING_PROFILE_BASE64 != '' }}
+        uses: Apple-Actions/install-provisioning-profile@v1
+        with:
+          provisioning-profile-base64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+          provisioning-profile-path: ${{ runner.temp }}/embedded.provisionprofile
+
+      # 7. 构建 macOS 应用
+      - name: Build macOS application
+        run: |
+          if [ "${{ secrets.APPLE_CERTIFICATE_BASE64 }}" != "" ]; then
+            echo "🔨 Building macOS application with code signing..."
+            # 使用签名构建，并启用混淆和调试信息分离
+            flutter build macos --release --obfuscate --split-debug-info=build/macos/Build/Products/Release/symbols
+          else
+            echo "🔨 Building macOS application without code signing..."
+            echo "⚠️  Note: Users will need to manually allow the app to run due to Gatekeeper"
+            # 未签名构建
+            flutter build macos --release
+          fi
+          echo "✅ macOS application build completed"
+
+      # 8. 打包 macOS 应用：.app 包本质是文件夹，需要打包成 ZIP
       - name: Archive macOS release
         uses: thedoctor0/zip-release@0.7.1
         with:
@@ -264,12 +323,131 @@ jobs:
           filename: 'flutter-2048-macos.zip'
           directory: 'build/macos/Build/Products/Release'  # macOS 构建输出目录
 
-      # 7. 上传 ZIP 到 GitHub Release
-      - name: Upload macOS ZIP to GitHub Release
-        uses: ncipollo/release-action@v1
+      # 9. 上传构建产物
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
         with:
-          allowUpdates: true
-          artifacts: "build/macos/Build/Products/Release/flutter-2048-macos.zip"
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
+          name: macos-zip
+          path: build/macos/Build/Products/Release/flutter-2048-macos.zip
+          retention-days: 7
+
+  # ========================
+  # 最后一步：创建 Release 并上传所有构建产物
+  # ========================
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest  # 使用 Ubuntu 环境创建 Release
+    needs: [build-android, build-windows, build-linux, build-macos]
+
+    # 只有所有构建任务都成功时才创建 Release
+    # 使用 always() 确保即使某些任务失败也会执行此检查
+    if: always() &&
+        needs.build-android.result == 'success' &&
+        needs.build-windows.result == 'success' &&
+        needs.build-linux.result == 'success' &&
+        needs.build-macos.result == 'success'
+
+    steps:
+      # 1. 下载所有构建产物
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      # 2. 显示下载的文件列表（用于调试）
+      - name: List downloaded files
+        run: |
+          echo "📁 Downloaded artifacts:"
+          find . -type f -name "*.apk" -o -name "*.zip" | sort
+
+      # 3. 创建 Release 并上传所有 Asset
+      # 使用 softprops/action-gh-release（社区维护的活跃 Action）
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}  # 使用推送的标签名
+          name: Release ${{ github.ref_name }}  # Release 标题
+          # Release 描述（使用 YAML 的块语法保持格式）
+          body: |
+            ## Flutter 2048 Game ${{ github.ref_name }}
+
+            🎮 一个使用 Flutter 开发的经典 2048 数字游戏，支持多平台运行
+
+            ### 📱 支持平台
+            - ✅ **Android** (APK) - 支持 Android 5.0+
+            - ✅ **Windows** (Windows x64) - 支持 Windows 10+
+            - ✅ **Linux** (Linux x64) - 支持 Ubuntu 18.04+
+            - ✅ **macOS** (macOS Universal) - 支持 macOS 10.14+
+            - ✅ **Web** (浏览器) - 支持现代浏览器
+
+            ### 📥 安装说明
+
+            **Android:**
+            1. 下载 `flutter-2048-android.apk`
+            2. 在 Android 设备上安装并运行
+            3. 首次运行时可能需要授予必要的权限
+
+            **Windows:**
+            1. 下载 `flutter-2048-windows.zip`
+            2. 解压缩到任意文件夹
+            3. 运行 `flutter_2048_game.exe`
+            4. 首次运行时 Windows Defender 可能会提示，选择"仍要运行"
+
+            **Linux:**
+            1. 下载 `flutter-2048-linux.zip`
+            2. 解压缩到任意文件夹
+            3. 运行 `flutter_2048_game`
+            4. 如果提示权限不足，执行 `chmod +x flutter_2048_game`
+
+            **macOS:**
+            1. 下载 `flutter-2048-macos.zip`
+            2. 双击解压 `Flutter 2048 Game.app`
+            3. 如果提示"无法打开"：
+               - 打开"系统偏好设置" > "安全性与隐私"
+               - 在"通用"标签页中点击"仍要打开"
+            4. 如有"已损坏"提示，说明应用未签名，请按上述步骤操作
+
+            **Web:**
+            1. 暂未部署 Web 版本
+            2. 可以本地运行体验：`flutter build web && flutter run -d chrome`
+
+            ### 🎯 游戏特色
+            - ⌨️ **键盘控制**：使用方向键（↑↓←→）移动方块
+            - 📱 **触摸支持**：在触摸屏上滑动手指移动方块
+            - 🏆 **分数系统**：实时统计当前分数和历史最高分
+            - 🎨 **响应式设计**：自适应不同屏幕尺寸
+            - 💾 **自动保存**：游戏进度和最高分自动保存
+
+            ### 🔧 技术栈
+            - **Flutter (Latest Stable)** - 跨平台 UI 框架
+            - **Dart** - 编程语言
+            - **Platform Channel** - 原生功能支持
+
+            ### 🔧 开发信息
+            - **构建时间**: ${{ github.event.head_commit.timestamp }}
+            - **提交哈希**: ${{ github.sha }}
+            - **分支**: ${{ github.ref_name }}
+            - **构建工具**: GitHub Actions
+
+            ### 🐛 反馈与支持
+            - 遇到问题？请提交 [Issue](../../issues)
+            - 欢迎贡献代码！查看 [贡献指南](../../blob/main/CONTRIBUTING.md)
+
+            ---
+            *🎉 感谢使用 Flutter 2048 Game！*
+
+          # 要上传的文件列表，使用通配符匹配
+          files: |
+            android-apk/*.apk
+            windows-zip/*.zip
+            linux-zip/*.zip
+            macos-zip/*.zip
+
+          draft: false  # 不创建草稿，直接发布
+          prerelease: false  # 不是预发布版本
+          generate_release_notes: true  # 自动生成 Release Notes（基于提交历史）
+
+      # 4. 清理构建产物（可选）
+      - name: Cleanup artifacts
+        if: always()  # 无论成功失败都执行
+        run: |
+          echo "🧹 Cleaning up artifacts..."
+          rm -rf android-apk windows-zip linux-zip macos-zip
