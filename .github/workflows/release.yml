@@ -67,7 +67,54 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}  # 使用 GitHub 提供的 token
           tag: ${{ github.ref_name }}  # 使用推送的标签名
           name: Release ${{ github.ref_name }}  # Release 标题
-          body: "Auto-generated release for Android platform.\n\nVersion: ${{ github.ref_name }}"  # Release 描述
+          body: |
+            ## Flutter 2048 Game ${{ github.ref_name }}
+
+            🎮 一个使用 Flutter 开发的经典 2048 数字游戏
+
+            ### 📱 支持平台
+            - ✅ Android (APK)
+            - ✅ Windows (Windows x64)
+            - ✅ Linux (Linux x64)
+            - ✅ macOS (macOS Universal)
+            - ✅ Web (浏览器)
+
+            ### 📥 安装说明
+
+            **Android:**
+            - 下载 `app-release.apk` 文件
+            - 在 Android 设备上安装并运行
+
+            **Windows:**
+            - 下载 `flutter-2048-windows.zip`
+            - 解压缩并运行 `flutter_2048_game.exe`
+
+            **Linux:**
+            - 下载 `flutter-2048-linux.zip`
+            - 解压缩并运行 `flutter_2048_game`
+
+            **macOS:**
+            - 下载 `flutter-2048-macos.zip`
+            - 解压缩并运行 `Flutter 2048 Game.app`
+
+            **Web:**
+            - 访问 [在线演示](#) (暂未部署 Web 版本)
+
+            ### 🎯 游戏特色
+            - ⌨️ 支持键盘方向键控制
+            - 📱 支持触摸滑动手势
+            - 🏆 分数统计和最高分记录
+            - 🎨 响应式设计，适配各种屏幕
+
+            ### 🔧 技术栈
+            - Flutter ${{ env.FLUTTER_VERSION || '3.x' }}
+            - Dart
+            - Platform Channel Support
+
+            ---
+            📅 构建时间: ${{ github.event.head_commit.timestamp }}
+            🌟 版本: ${{ github.ref_name }}
+            📦 构建产物: Android APK
 
   # ========================
   # Windows 平台构建任务
@@ -111,6 +158,7 @@ jobs:
           artifacts: "build/windows/x64/runner/Release/flutter-2048-windows.zip"
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
 
   # ========================
   # Linux 平台构建任务
@@ -176,6 +224,7 @@ jobs:
           artifacts: "build/linux/x64/release/bundle/flutter-2048-linux.zip"
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
 
   # ========================
   # macOS 平台构建任务
@@ -223,3 +272,4 @@ jobs:
           artifacts: "build/macos/Build/Products/Release/flutter-2048-macos.zip"
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
