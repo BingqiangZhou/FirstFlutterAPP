@@ -879,16 +879,39 @@ jobs:
      contents: write
    ```
 
-2. **条件语句语法错误**
-   ```yaml
-   # 错误（直接引用secrets）
-   if: secrets.VAR != ''
+2. **条件语句中无法使用secrets**
 
-   # 正确（使用表达式语法）
-   if: ${{ secrets.VAR != '' }}
+   GitHub Actions不支持在`if`条件中直接使用secrets。解决方案：
+
+   ```yaml
+   # 错误（不支持）
+   - name: Step with secret condition
+     if: ${{ secrets.MY_SECRET != '' }}
+
+   # 正确的解决方案1：使用环境变量
+   - name: Check configuration
+     run: |
+       if [ "${{ secrets.MY_SECRET }}" != "" ]; then
+         echo "CONFIG_ENABLED=true" >> $GITHUB_ENV
+       else
+         echo "CONFIG_ENABLED=false" >> $GITHUB_ENV
+
+   - name: Conditional step
+     if: env.CONFIG_ENABLED == 'true'
+     run: echo "Secret is configured"
+
+   # 正确的解决方案2：在脚本内部检查
+   - name: Step with internal check
+     run: |
+       if [ "${{ secrets.MY_SECRET }}" != "" ]; then
+         echo "Secret exists, proceeding..."
+         # 使用secret的逻辑
+       else
+         echo "No secret, skipping..."
+       fi
    ```
 
-   **说明**：在条件语句中使用secrets时，必须使用 `${{ }}` 表达式语法。这是GitHub Actions的要求。
+   **说明**：GitHub Actions限制secrets只能在`run`步骤和action的`with`参数中使用，不能在`if`条件中直接使用。
 
 3. **空的环境变量块**
    ```yaml

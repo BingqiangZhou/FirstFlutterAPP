@@ -277,28 +277,24 @@ jobs:
         run: flutter config --enable-macos-desktop
 
       # 6. [可选] macOS 代码签名 - 需要配置 Apple Developer 证书
-      # 配置 GitHub Secrets：
-      # - APPLE_CERTIFICATE_BASE64: P12 证书的 base64 编码
-      # - APPLE_CERTIFICATE_PASSWORD: P12 证书密码
-      # - PROVISIONING_PROFILE_BASE64: Provisioning Profile 的 base64 编码
-      - name: Import Code-Signing Certificates
-        if: ${{ secrets.APPLE_CERTIFICATE_BASE64 != '' }}
-        uses: Apple-Actions/import-codesign-certs@v1
-        with:
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-
-      - name: Install the Provisioning Profile
-        if: ${{ secrets.PROVISIONING_PROFILE_BASE64 != '' }}
-        uses: Apple-Actions/install-provisioning-profile@v1
-        with:
-          provisioning-profile-base64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
-          provisioning-profile-path: ${{ runner.temp }}/embedded.provisionprofile
+      # 注意：以下步骤会在内部检查是否配置了secrets，未配置时自动跳过
+      - name: Setup Code Signing (if configured)
+        run: |
+          echo "🔍 Checking for code signing configuration..."
+          if [ "${{ secrets.APPLE_CERTIFICATE_BASE64 }}" != "" ]; then
+            echo "✅ Apple certificates found, setting up code signing"
+            echo "${{ secrets.APPLE_CERTIFICATE_BASE64 }}" | base64 --decode > certificates.p12
+            echo "${{ secrets.PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > profile.mobileprovision
+            echo "CODE_SIGNING_ENABLED=true" >> $GITHUB_ENV
+          else
+            echo "⚠️ No Apple certificates configured, building unsigned"
+            echo "CODE_SIGNING_ENABLED=false" >> $GITHUB_ENV
+          fi
 
       # 7. 构建 macOS 应用
       - name: Build macOS application
         run: |
-          if [ "${{ secrets.APPLE_CERTIFICATE_BASE64 }}" != "" ]; then
+          if [ "$CODE_SIGNING_ENABLED" == "true" ]; then
             echo "🔨 Building macOS application with code signing..."
             # 使用签名构建，并启用混淆和调试信息分离
             flutter build macos --release --obfuscate --split-debug-info=build/macos/Build/Products/Release/symbols
