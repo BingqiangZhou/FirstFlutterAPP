@@ -597,21 +597,132 @@ jobs:
 
 #### 语义化版本（Semantic Versioning）
 推荐使用 `v主版本.次版本.修订版本` 格式：
-- `v1.0.0` - 首次正式发布
-- `v1.1.0` - 新功能发布
-- `v1.1.1` - Bug 修复发布
+- `v1.0.0` - 首次正式发布（主版本号）
+- `v1.1.0` - 新功能发布（次版本号）
+- `v1.1.1` - Bug 修复发布（修订版本号）
+- `v2.0.0` - 重大更改，不兼容旧版本（主版本号）
 
-#### 创建版本标签
+#### 创建和管理版本标签
 
 ```bash
-# 本地创建标签
-git tag v1.0.0
+# 1. 本地创建标签
+git tag v0.0.7
 
-# 推送标签到远程（会触发 GitHub Actions）
-git push origin v1.0.0
+# 2. 推送标签到远程（会自动触发 GitHub Actions）
+git push origin v0.0.7
 
-# 批量推送所有标签
+# 3. 批量推送所有本地标签
 git push origin --tags
+
+# 4. 查看所有标签
+git tag -l
+
+# 5. 查看标签详情
+git show v0.0.7
+
+# 6. 删除本地标签
+git tag -d v0.0.7
+
+# 7. 删除远程标签
+git push origin :refs/tags/v0.0.7
+```
+
+#### 同步和清理远程标签
+
+```bash
+# 1. 获取所有远程更新（包括标签）
+git fetch origin --prune --prune-tags
+
+# 2. 获取所有远程标签但不下载
+git fetch --tags
+
+# 3. 同步远程标签到本地（推荐）
+git fetch origin --tags
+
+# 4. 查看本地和远程标签的差异
+git tag -l | xargs -I {} git ls-remote --tags origin {} | cut -f2
+
+# 5. 批量删除本地不在远程的标签
+git tag -l | while read tag; do
+  if ! git rev-parse --verify "refs/tags/$tag" 2>/dev/null; then
+    git tag -d "$tag"
+  fi
+done
+```
+
+#### 创建带注释的标签
+
+```bash
+# 1. 创建带注释的标签（推荐）
+git tag -a v1.0.0 -m "Release version 1.0.0
+
+Features:
+- Added new game modes
+- Improved UI design
+- Bug fixes"
+
+# 2. 使用编辑器创建详细注释
+git tag -a v1.0.0 -m ""
+
+# 3. 后续编辑标签注释
+git tag -a v1.0.0 -f -m "Updated release notes"
+
+# 4. 推送带注释的标签
+git push origin v1.0.0
+```
+
+#### 基于提交创建标签
+
+```bash
+# 1. 基于特定提交创建标签
+git tag v1.0.0 <commit-hash>
+
+# 2. 基于特定分支的最新提交创建标签
+git tag v1.0.0 main
+
+# 3. 查看最近的提交历史
+git log --oneline -10
+
+# 4. 交互式选择提交并打标签
+git tag -a v1.0.0 -m "Release" $(git rev-parse HEAD)
+```
+
+#### 批量管理标签
+
+```bash
+# 1. 删除所有本地标签
+git tag -d $(git tag -l)
+
+# 2. 删除所有远程标签（需要先删除本地）
+git tag -d $(git tag -l)
+git push origin --delete $(git tag -l)
+
+# 3. 批量推送多个标签
+for tag in v1.0.0 v1.0.1 v1.1.0; do
+  git push origin "$tag"
+done
+
+# 4. 创建预发布标签
+git tag -a v1.0.0-beta.1 -m "Beta release 1.0.0"
+git push origin v1.0.0-beta.1
+```
+
+#### GPG 签名标签（可选）
+
+```bash
+# 1. 设置 GPG 签名
+git config user.signingkey <your-gpg-key-id>
+git config commit.gpgsign true
+git config tag.gpgsign true
+
+# 2. 创建签名标签
+git tag -s v1.0.0 -m "Signed release 1.0.0"
+
+# 3. 验证签名标签
+git tag -v v1.0.0
+
+# 4. 推送签名标签
+git push origin v1.0.0
 ```
 
 ### 自动化 Release Notes
@@ -1020,12 +1131,18 @@ jobs:
    - macOS: 必须使用 `macos-latest`
    - Linux: 使用 `ubuntu-latest` 并安装必要的系统依赖
 
-7. **错误处理和调试**
+7. **版本标签管理**
+   - 使用语义化版本号（如 v1.0.0）
+   - 为每个标签添加清晰的注释说明
+   - 定期同步和清理远程标签：`git fetch origin --prune --prune-tags`
+   - 推送标签前确认代码已提交：`git push origin v0.0.7`
+
+8. **错误处理和调试**
    - 添加详细的日志输出
    - 使用 `if: always()` 确保清理步骤执行
    - 上传构建日志以便调试
 
-8. **清晰的命名和文档**
+9. **清晰的命名和文档**
    - 为步骤和文件使用描述性名称
    - 在工作流文件中添加详细注释
    - 维护详细的配置文档
