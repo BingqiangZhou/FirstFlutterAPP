@@ -67,6 +67,7 @@ permissions:
 
 **说明：**
 - `contents: write`：允许向仓库写入内容（创建 Release）
+- 注意：新版本的 GitHub Actions 不再需要 `releases: write` 权限
 - 其他权限选项：
   - `actions: read/write`：读取/写入 Actions
   - `checks: read/write`：读取/写入检查
@@ -859,6 +860,43 @@ jobs:
     path: build/app/outputs/flutter-apk/app-release.apk
     retention-days: 7
 ```
+
+#### 8. YAML 语法错误
+
+**问题**：GitHub Actions 配置文件语法错误
+
+**常见错误和解决方案**：
+
+1. **权限配置错误**
+   ```yaml
+   # 错误（旧版本）
+   permissions:
+     contents: write
+     releases: write  # 不再需要
+
+   # 正确（新版本）
+   permissions:
+     contents: write
+   ```
+
+2. **条件语句语法错误**
+   ```yaml
+   # 错误
+   if: ${{ secrets.VAR != '' }}
+
+   # 正确
+   if: secrets.VAR != ''
+   ```
+
+3. **空的环境变量块**
+   ```yaml
+   # 错误
+   env:
+     # 注释不能作为唯一内容
+
+   # 正确（如果不需要全局环境变量，可以删除整个块）
+   # 或者删除 env 块
+   ```
 
 ### 调试技巧
 

@@ -11,11 +11,6 @@ on:
 # 权限设置：必须授予 contents: write 权限才能创建 Release
 permissions:
   contents: write
-  releases: write
-
-# 全局环境变量
-env:
-  # Flutter 版本将通过 channel 自动获取最新稳定版本
 
 jobs:
   # ========================
@@ -287,14 +282,14 @@ jobs:
       # - APPLE_CERTIFICATE_PASSWORD: P12 证书密码
       # - PROVISIONING_PROFILE_BASE64: Provisioning Profile 的 base64 编码
       - name: Import Code-Signing Certificates
-        if: ${{ secrets.APPLE_CERTIFICATE_BASE64 != '' }}
+        if: secrets.APPLE_CERTIFICATE_BASE64 != ''
         uses: Apple-Actions/import-codesign-certs@v1
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
 
       - name: Install the Provisioning Profile
-        if: ${{ secrets.PROVISIONING_PROFILE_BASE64 != '' }}
+        if: secrets.PROVISIONING_PROFILE_BASE64 != ''
         uses: Apple-Actions/install-provisioning-profile@v1
         with:
           provisioning-profile-base64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
