@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
 import 'dart:math';
+import 'dart:io' show Platform;
 
 void main() {
   runApp(const MyApp());
@@ -13,9 +14,10 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '2048 Game',
+      title: 'Flutter 2048 Game',
       theme: ThemeData(primarySwatch: Colors.deepPurple, useMaterial3: true),
       home: const Game2048(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
@@ -354,36 +356,237 @@ class _Game2048State extends State<Game2048> {
 
   @override
   Widget build(BuildContext context) {
+    // 检测是否为桌面平台
+    bool isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
     return Scaffold(
+      backgroundColor: const Color(0xFFFAF8EF),
       appBar: AppBar(
         title: const Text('2048 Game'),
         centerTitle: true,
         backgroundColor: Colors.deepPurple,
+        elevation: 0,
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          // 根据屏幕尺寸计算网格大小
-          double gridSizeValue = min(
-            constraints.maxWidth * 0.9,
-            constraints.maxHeight * 0.6,
-          );
-          gridSizeValue = min(gridSizeValue, 400); // 最大400px
-          gridSizeValue = max(gridSizeValue, 280); // 最小280px
+          // 桌面端使用不同的布局策略
+          double gridSizeValue;
+          if (isDesktop) {
+            // 桌面端：使用固定的最小尺寸，确保游戏可见性
+            double minGridSize = min(constraints.maxWidth, constraints.maxHeight) * 0.6;
+            gridSizeValue = min(minGridSize, 600); // 最大600px
+            gridSizeValue = max(gridSizeValue, 400); // 最小400px
+          } else {
+            // 移动端：保持原有逻辑
+            gridSizeValue = min(
+              constraints.maxWidth * 0.9,
+              constraints.maxHeight * 0.6,
+            );
+            gridSizeValue = min(gridSizeValue, 400); // 最大400px
+            gridSizeValue = max(gridSizeValue, 280); // 最小280px
+          }
 
           // 计算字体大小
           double tileFontSize = gridSizeValue / 12;
-          double titleFontSize = min(48, constraints.maxWidth / 8);
-          double buttonFontSize = min(16, constraints.maxWidth / 25);
+          double titleFontSize = isDesktop ? 48 : min(48, constraints.maxWidth / 8);
+          double buttonFontSize = isDesktop ? 18 : min(16, constraints.maxWidth / 25);
 
-          return RawKeyboardListener(
-            focusNode: FocusNode(),
-            onKey: _handleKeyEvent,
-            autofocus: true,
-            child: GestureDetector(
-              onVerticalDragEnd: _handleSwipe,
-              onHorizontalDragEnd: _handleSwipe,
-              child: Container(
-                color: const Color(0xFFFAF8EF),
+          // 计算内边距
+          double horizontalPadding = isDesktop ? 32.0 : constraints.maxWidth * 0.04;
+          double verticalPadding = isDesktop ? 24.0 : constraints.maxWidth * 0.04;
+
+          // 桌面端和移动端使用不同的布局结构
+          if (isDesktop) {
+            // 桌面端：使用更紧凑的垂直布局
+            return RawKeyboardListener(
+              focusNode: FocusNode(),
+              onKey: _handleKeyEvent,
+              autofocus: true,
+              child: SingleChildScrollView(
+                child: Container(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight,
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: verticalPadding),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 分数区域
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _buildScoreBox('分数', score, isDesktop: true),
+                            SizedBox(width: 20),
+                            _buildScoreBox('最高分', bestScore, isDesktop: true),
+                          ],
+                        ),
+
+                        SizedBox(height: verticalPadding),
+
+                        // 游戏标题和按钮
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '2048',
+                              style: TextStyle(
+                                fontSize: titleFontSize,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.deepPurple,
+                              ),
+                            ),
+                            ElevatedButton(
+                              onPressed: _initGame,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.deepPurple,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: Text(
+                                '新游戏',
+                                style: TextStyle(
+                                  fontSize: buttonFontSize,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        SizedBox(height: verticalPadding),
+
+                        // 游戏网格
+                        Container(
+                          width: gridSizeValue,
+                          height: gridSizeValue,
+                          padding: EdgeInsets.all(gridSizeValue * 0.025),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFBBADA0),
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: GridView.builder(
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: gridSize,
+                              crossAxisSpacing: gridSizeValue * 0.025,
+                              mainAxisSpacing: gridSizeValue * 0.025,
+                            ),
+                            itemCount: gridSize * gridSize,
+                            itemBuilder: (context, index) {
+                              int row = index ~/ gridSize;
+                              int col = index % gridSize;
+                              int value = grid[row][col];
+
+                              return Container(
+                                decoration: BoxDecoration(
+                                  color: _getTileColor(value),
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.1),
+                                      blurRadius: 2,
+                                      offset: const Offset(1, 1),
+                                    ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    value == 0 ? '' : '$value',
+                                    style: TextStyle(
+                                      fontSize: value > 512
+                                          ? tileFontSize * 0.7
+                                          : tileFontSize,
+                                      fontWeight: FontWeight.bold,
+                                      color: _getTextColor(value),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+
+                        SizedBox(height: verticalPadding),
+
+                        // 游戏状态提示
+                        if (isWin || isGameOver)
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: isWin ? Colors.green : Colors.red,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  isWin ? '🎉 恭喜你赢了！' : '😢 游戏结束',
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '最终得分: $score',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                        SizedBox(height: verticalPadding),
+
+                        // 操作提示
+                        Text(
+                          '使用方向键: ↑ ↓ ← 或 → 来移动方块',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+
+                        SizedBox(height: verticalPadding),
+                    ],
+                  ),
+                ),
+              ),
+              ),
+            );
+          } else {
+            // 移动端：保持原有布局
+            return RawKeyboardListener(
+              focusNode: FocusNode(),
+              onKey: _handleKeyEvent,
+              autofocus: true,
+              child: GestureDetector(
+                onVerticalDragEnd: _handleSwipe,
+                onHorizontalDragEnd: _handleSwipe,
                 child: Column(
                   children: [
                     // 分数区域
@@ -392,12 +595,8 @@ class _Game2048State extends State<Game2048> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _buildScoreBox('分数', score, constraints.maxWidth),
-                          _buildScoreBox(
-                            '最高分',
-                            bestScore,
-                            constraints.maxWidth,
-                          ),
+                          _buildScoreBox('分数', score, screenWidth: constraints.maxWidth),
+                          _buildScoreBox('最高分', bestScore, screenWidth: constraints.maxWidth),
                         ],
                       ),
                     ),
@@ -458,12 +657,11 @@ class _Game2048State extends State<Game2048> {
                           ),
                           child: GridView.builder(
                             physics: const NeverScrollableScrollPhysics(),
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: gridSize,
-                                  crossAxisSpacing: gridSizeValue * 0.025,
-                                  mainAxisSpacing: gridSizeValue * 0.025,
-                                ),
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: gridSize,
+                              crossAxisSpacing: gridSizeValue * 0.025,
+                              mainAxisSpacing: gridSizeValue * 0.025,
+                            ),
                             itemCount: gridSize * gridSize,
                             itemBuilder: (context, index) {
                               int row = index ~/ gridSize;
@@ -551,42 +749,82 @@ class _Game2048State extends State<Game2048> {
                   ],
                 ),
               ),
-            ),
-          );
+            );
+          }
         },
       ),
     );
   }
 
-  Widget _buildScoreBox(String label, int value, double screenWidth) {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: screenWidth * 0.04,
-        vertical: screenWidth * 0.02,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.deepPurple,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: min(14, screenWidth / 30),
-              color: Colors.white70,
+  Widget _buildScoreBox(String label, int value, {bool isDesktop = false, double screenWidth = 0}) {
+    if (isDesktop) {
+      // 桌面端：使用固定尺寸
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.deepPurple,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
             ),
-          ),
-          Text(
-            '$value',
-            style: TextStyle(
-              fontSize: min(24, screenWidth / 18),
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Colors.white70,
+              ),
             ),
-          ),
-        ],
-      ),
-    );
+            const SizedBox(height: 4),
+            Text(
+              '$value',
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // 移动端：保持原有逻辑
+      return Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: screenWidth * 0.04,
+          vertical: screenWidth * 0.02,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.deepPurple,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: min(14, screenWidth / 30),
+                color: Colors.white70,
+              ),
+            ),
+            Text(
+              '$value',
+              style: TextStyle(
+                fontSize: min(24, screenWidth / 18),
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
   }
 }

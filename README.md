@@ -33,8 +33,8 @@
 
 1. 克隆项目到本地
    ```bash
-   git clone https://github.com/your-username/FirstFlutterAPP_2048.git
-   cd FirstFlutterAPP_2048
+   git clone https://github.com/your-username/FirstFlutterAPP.git
+   cd FirstFlutterAPP
    ```
 
 2. 安装依赖
