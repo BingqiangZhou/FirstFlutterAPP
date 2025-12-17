@@ -99,3 +99,87 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
+
+  # =================================================
+  # 任务 3: 编译 Linux (AppImage 或 Zip)
+  # =================================================
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      # 【关键】安装 Linux 编译依赖
+      - name: Install Linux Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Enable Linux Desktop
+        run: flutter config --enable-linux-desktop
+
+      - name: Build Linux
+        run: flutter build linux --release
+
+      # Linux 编译产物也是一个文件夹，需要打包
+      - name: Archive Linux Release
+        uses: thedoctor0/zip-release@0.7.1
+        with:
+          type: 'zip'
+          filename: 'linux-release.zip'
+          directory: 'build/linux/x64/release/bundle' # Flutter 3.0+ 默认路径
+
+      - name: Upload Linux to Release
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifacts: "build/linux/x64/release/bundle/linux-release.zip"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+
+  # =================================================
+  # 任务 4: 编译 macOS (DMG 或 Zip)
+  # =================================================
+  build-macos:
+    runs-on: macos-latest # 必须用 Mac 环境
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Enable macOS Desktop
+        run: flutter config --enable-macos-desktop
+
+      - name: Build macOS
+        run: flutter build macos --release
+
+      # macOS 产物是一个 .app 包，本质是文件夹，需要打包
+      - name: Archive macOS Release
+        uses: thedoctor0/zip-release@0.7.1
+        with:
+          type: 'zip'
+          filename: 'macos-release.zip'
+          directory: 'build/macos/Build/Products/Release'
+
+      - name: Upload macOS to Release
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifacts: "build/macos/Build/Products/Release/macos-release.zip"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
