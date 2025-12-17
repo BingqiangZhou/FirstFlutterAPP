@@ -522,7 +522,7 @@ jobs:
     # ... 构建 Android APK
     steps:
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: android-apk
           path: build/app/outputs/flutter-apk/app-release.apk
@@ -531,7 +531,7 @@ jobs:
     # ... 构建 Windows 应用
     steps:
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: windows-zip
           path: build/windows/x64/runner/Release/flutter-2048-windows.zip
@@ -543,7 +543,7 @@ jobs:
     steps:
       # 下载所有构建产物
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
 
       # 创建 Release 并上传所有资产
       - name: Create Release and Upload Assets
@@ -573,7 +573,7 @@ jobs:
 ```yaml
 # 上传构建产物
 - name: Upload build artifacts
-  uses: actions/upload-artifact@v3
+  uses: actions/upload-artifact@v4
   with:
     name: android-apk
     path: build/app/outputs/flutter-apk/app-release.apk
@@ -853,7 +853,7 @@ jobs:
 
 ```yaml
 - name: Upload build artifacts
-  uses: actions/upload-artifact@v3
+  uses: actions/upload-artifact@v4
   if: always()  # 即使构建失败也尝试上传日志
   with:
     name: android-apk
@@ -934,7 +934,7 @@ jobs:
 2. **上传构建日志**
 ```yaml
 - name: Upload build logs
-  uses: actions/upload-artifact@v3
+  uses: actions/upload-artifact@v4
   if: failure()
   with:
     name: build-logs
@@ -958,7 +958,8 @@ jobs:
 ### 最佳实践
 
 1. **使用具体版本的 Actions**
-   - 使用 `@v3` 而不是 `@latest`，确保构建稳定性
+   - 使用 `@v4` 而不是 `@latest`，确保构建稳定性
+   - 定期更新到最新稳定版本（如 `actions/upload-artifact` 已从 v3 更新到 v4）
    - 避免使用已弃用的 Actions（如 `actions/create-release`）
 
 2. **Flutter 版本管理**
