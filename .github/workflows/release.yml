@@ -1,185 +1,225 @@
+# GitHub Actions 工作流：Flutter 多平台自动构建
 name: Build and Release App
 
-# 触发条件：当你推送 v* 标签时 (例如 v1.0.0)
+# 触发条件：当推送版本标签时或手动触发
 on:
   push:
     tags:
-      - "v*"
-  workflow_dispatch:  # <--- 加上这一行！
+      - "v*"  # 匹配所有以 v 开头的标签，如 v1.0.0、v2.1.3 等
+  workflow_dispatch:  # 允许在 GitHub Actions 页面手动触发
 
-# 【新增】必须加上这一段，授予写权限！
+# 权限设置：必须授予 contents: write 权限才能创建 Release
 permissions:
   contents: write
 
 jobs:
-  # =================================================
-  # 任务 1: 编译 Android APK
-  # =================================================
+  # ========================
+  # Android 平台构建任务
+  # ========================
   build-android:
+    # 使用 Ubuntu 虚拟环境
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
 
-      - name: Setup Java
+    steps:
+      # 1. 检出代码：获取仓库的源代码
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2. 设置 Java 环境：Android 构建需要 Java 17
+      - name: Setup Java environment
         uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: 'temurin'  # 使用 Eclipse Temurin JDK
+          java-version: '17'       # Java 版本
 
-      - name: Setup Flutter
+      # 3. 设置 Flutter 环境：安装 Flutter SDK
+      - name: Setup Flutter environment
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
-          
-      - name: Get Dependencies
+          channel: 'stable'  # 使用稳定版本的 Flutter
+
+      # 4. 获取项目依赖：运行 flutter pub get 下载依赖包
+      - name: Get Flutter dependencies
         run: flutter pub get
 
-      # 解码 Keystore 文件
-      - name: Decode Keystore
+      # 5. [可选] 解码 Android 签名密钥（用于发布签名版本）
+      # 如果需要发布签名的 APK，需要先配置 GitHub Secrets
+      - name: Decode Android keystore (if configured)
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
-      
-      # 创建 key.properties 让 Gradle 读取
-      - name: Create key.properties
-        run: |
-          echo "storePassword=${{ secrets.KEY_PASSWORD }}" > android/key.properties
-          echo "keyPassword=${{ secrets.ALIAS_PASSWORD }}" >> android/key.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
-          echo "storeFile=upload-keystore.jks" >> android/key.properties
+          if [ "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" != "" ]; then
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
+            echo "storePassword=${{ secrets.KEY_PASSWORD }}" > android/key.properties
+            echo "keyPassword=${{ secrets.ALIAS_PASSWORD }}" >> android/key.properties
+            echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+            echo "storeFile=upload-keystore.jks" >> android/key.properties
+          fi
 
-      - name: Build APK
+      # 6. 构建 Android APK：生成发布版本的 Android 安装包
+      - name: Build Android APK
         run: flutter build apk --release
 
-      # 上传到 GitHub Release
-      - name: Upload APK to Release
+      # 7. 上传 APK 到 GitHub Release：将构建产物上传到 Releases 页面
+      - name: Upload APK to GitHub Release
         uses: ncipollo/release-action@v1
         with:
-          allowUpdates: true
-          artifacts: "build/app/outputs/flutter-apk/app-release.apk"
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
-          body: "Auto-generated release for Android."
+          allowUpdates: true  # 允许更新已存在的 Release
+          artifacts: "build/app/outputs/flutter-apk/app-release.apk"  # APK 文件路径
+          token: ${{ secrets.GITHUB_TOKEN }}  # 使用 GitHub 提供的 token
+          tag: ${{ github.ref_name }}  # 使用推送的标签名
+          name: Release ${{ github.ref_name }}  # Release 标题
+          body: "Auto-generated release for Android platform.\n\nVersion: ${{ github.ref_name }}"  # Release 描述
 
-  # =================================================
-  # 任务 2: 编译 Windows EXE
-  # =================================================
+  # ========================
+  # Windows 平台构建任务
+  # ========================
   build-windows:
+    # 必须使用 Windows 虚拟环境
     runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v3
 
-      - name: Setup Flutter
+    steps:
+      # 1. 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2. 设置 Flutter 环境
+      - name: Setup Flutter environment
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
-      - name: Get Dependencies
+      # 3. 获取依赖
+      - name: Get Flutter dependencies
         run: flutter pub get
 
-      - name: Build Windows
+      # 4. 构建 Windows 应用：生成 Windows 桌面应用
+      - name: Build Windows application
         run: flutter build windows --release
 
-      # 打包成 zip
-      - name: Archive Windows Release
+      # 5. 打包 Windows 应用：将生成的可执行文件打包成 ZIP
+      - name: Archive Windows release
         uses: thedoctor0/zip-release@0.7.1
         with:
           type: 'zip'
-          filename: 'windows-release.zip'
-          # 【修改点 1】加上 /x64/
-          directory: 'build/windows/x64/runner/Release' 
+          filename: 'flutter-2048-windows.zip'  # ZIP 文件名
+          directory: 'build/windows/x64/runner/Release'  # Windows 构建输出目录
 
-      # 上传到 GitHub Release
-      - name: Upload Windows Zip to Release
+      # 6. 上传 ZIP 到 GitHub Release
+      - name: Upload Windows ZIP to GitHub Release
         uses: ncipollo/release-action@v1
         with:
           allowUpdates: true
-          # 【修改点 2】这里的路径也要加上 /x64/，因为 zip 生成在上面的目录里
-          artifacts: "build/windows/x64/runner/Release/windows-release.zip"
+          artifacts: "build/windows/x64/runner/Release/flutter-2048-windows.zip"
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
 
-  # =================================================
-  # 任务 3: 编译 Linux (AppImage 或 Zip)
-  # =================================================
+  # ========================
+  # Linux 平台构建任务
+  # ========================
   build-linux:
+    # 使用 Ubuntu 虚拟环境
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
 
-      # 【关键】安装 Linux 编译依赖
-      - name: Install Linux Dependencies
+    steps:
+      # 1. 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2. 安装 Linux 构建依赖：Flutter Linux 桌面应用需要的系统库
+      - name: Install Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libgtk-3-dev \
+            libglib2.0-dev \
+            libpango1.0-dev \
+            libatk1.0-dev \
+            libcairo-gobject2 \
+            libgdk-pixbuf2.0-dev \
+            libgraphene-1.0-dev \
+            libharfbuzz-dev
 
-      - name: Setup Flutter
+      # 3. 设置 Flutter 环境
+      - name: Setup Flutter environment
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
-      - name: Get Dependencies
+      # 4. 获取依赖
+      - name: Get Flutter dependencies
         run: flutter pub get
 
-      - name: Enable Linux Desktop
+      # 5. 启用 Linux 桌面支持
+      - name: Enable Linux desktop support
         run: flutter config --enable-linux-desktop
 
-      - name: Build Linux
+      # 6. 构建 Linux 应用
+      - name: Build Linux application
         run: flutter build linux --release
 
-      # Linux 编译产物也是一个文件夹，需要打包
-      - name: Archive Linux Release
+      # 7. 打包 Linux 应用
+      - name: Archive Linux release
         uses: thedoctor0/zip-release@0.7.1
         with:
           type: 'zip'
-          filename: 'linux-release.zip'
-          directory: 'build/linux/x64/release/bundle' # Flutter 3.0+ 默认路径
+          filename: 'flutter-2048-linux.zip'
+          directory: 'build/linux/x64/release/bundle'  # Linux 构建输出目录
 
-      - name: Upload Linux to Release
+      # 8. 上传 ZIP 到 GitHub Release
+      - name: Upload Linux ZIP to GitHub Release
         uses: ncipollo/release-action@v1
         with:
           allowUpdates: true
-          artifacts: "build/linux/x64/release/bundle/linux-release.zip"
+          artifacts: "build/linux/x64/release/bundle/flutter-2048-linux.zip"
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
 
-  # =================================================
-  # 任务 4: 编译 macOS (DMG 或 Zip)
-  # =================================================
+  # ========================
+  # macOS 平台构建任务
+  # ========================
   build-macos:
-    runs-on: macos-latest # 必须用 Mac 环境
-    steps:
-      - uses: actions/checkout@v3
+    # 必须使用 macOS 虚拟环境
+    runs-on: macos-latest
 
-      - name: Setup Flutter
+    steps:
+      # 1. 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2. 设置 Flutter 环境
+      - name: Setup Flutter environment
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
-      - name: Get Dependencies
+      # 3. 获取依赖
+      - name: Get Flutter dependencies
         run: flutter pub get
 
-      - name: Enable macOS Desktop
+      # 4. 启用 macOS 桌面支持
+      - name: Enable macOS desktop support
         run: flutter config --enable-macos-desktop
 
-      - name: Build macOS
+      # 5. 构建 macOS 应用
+      - name: Build macOS application
         run: flutter build macos --release
 
-      # macOS 产物是一个 .app 包，本质是文件夹，需要打包
-      - name: Archive macOS Release
+      # 6. 打包 macOS 应用：.app 包本质是文件夹，需要打包成 ZIP
+      - name: Archive macOS release
         uses: thedoctor0/zip-release@0.7.1
         with:
           type: 'zip'
-          filename: 'macos-release.zip'
-          directory: 'build/macos/Build/Products/Release'
+          filename: 'flutter-2048-macos.zip'
+          directory: 'build/macos/Build/Products/Release'  # macOS 构建输出目录
 
-      - name: Upload macOS to Release
+      # 7. 上传 ZIP 到 GitHub Release
+      - name: Upload macOS ZIP to GitHub Release
         uses: ncipollo/release-action@v1
         with:
           allowUpdates: true
-          artifacts: "build/macos/Build/Products/Release/macos-release.zip"
+          artifacts: "build/macos/Build/Products/Release/flutter-2048-macos.zip"
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
