@@ -175,19 +175,11 @@ jobs:
         run: |
           echo "📦 Installing Linux dependencies for Flutter desktop..."
           sudo apt-get update
-          sudo apt-get install -y \
-            clang \              # C++ 编译器，Flutter 需要它来编译原生代码
-            cmake \              # 构建系统
-            ninja-build \        # 快速构建工具
-            pkg-config \         # 包配置工具，用于查找库文件
-            libgtk-3-dev \       # GTK 3 开发库，用于 Linux GUI
-            libglib2.0-dev \     # GLib 库，GTK 的核心库
-            libpango1.0-dev \    # Pango 文本布局库
-            libatk1.0-dev \      # ATK 可访问性工具包
-            libcairo-gobject2 \  # Cairo 图形库
-            libgdk-pixbuf2.0-dev \  # GDK Pixbuf 库，用于图像处理
-            libgraphene-1.0-dev \   # Graphene 图形库
-            libharfbuzz-dev      # HarfBuzz 文本整形库
+          # 分批安装，避免长命令行问题
+          sudo apt-get install -y clang cmake ninja-build pkg-config
+          sudo apt-get install -y libgtk-3-dev libglib2.0-dev libpango1.0-dev
+          sudo apt-get install -y libatk1.0-dev libcairo-gobject2 libgdk-pixbuf2.0-dev
+          sudo apt-get install -y libgraphene-1.0-dev libharfbuzz-dev
           echo "✅ Linux dependencies installed"
 
       # 3. 缓存 Flutter 依赖

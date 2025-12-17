@@ -384,20 +384,17 @@ Linux 桌面应用需要安装特定的系统库：
 - name: Install Linux build dependencies
   run: |
     sudo apt-get update
-    sudo apt-get install -y \
-      clang \              # C++ 编译器
-      cmake \              # 构建系统
-      ninja-build \        # 快速构建工具
-      pkg-config \         # 包配置工具
-      libgtk-3-dev \       # GTK 3 开发库
-      libglib2.0-dev \     # GLib 库
-      libpango1.0-dev \    # Pango 文本布局库
-      libatk1.0-dev \      # ATK 可访问性工具包
-      libcairo-gobject2 \  # Cairo 图形库
-      libgdk-pixbuf2.0-dev \  # GDK Pixbuf 库
-      libgraphene-1.0-dev \   # Graphene 图形库
-      libharfbuzz-dev      # HarfBuzz 文本整形库
+    # 分批安装，避免长命令行解析问题
+    sudo apt-get install -y clang cmake ninja-build pkg-config
+    sudo apt-get install -y libgtk-3-dev libglib2.0-dev libpango1.0-dev
+    sudo apt-get install -y libatk1.0-dev libcairo-gobject2 libgdk-pixbuf2.0-dev
+    sudo apt-get install -y libgraphene-1.0-dev libharfbuzz-dev
 ```
+
+**说明：**
+- 分批安装包可以避免过长的命令行导致的解析错误
+- 如果遇到包找不到的问题，可能需要先更新包索引：`sudo apt-get update`
+- 某些包名在不同Ubuntu版本中可能有差异，请根据实际情况调整
 
 ### 启用 Linux 桌面支持
 
@@ -841,6 +838,41 @@ jobs:
     export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
     flutter doctor
 ```
+
+#### 9. Linux 依赖安装失败
+
+**问题**：`E: Unable to locate package` 错误
+
+**解决方案**：
+1. **分批安装包**（推荐）：
+   ```yaml
+   - name: Install Linux build dependencies
+     run: |
+       sudo apt-get update
+       # 分批安装，避免长命令行问题
+       sudo apt-get install -y clang cmake ninja-build pkg-config
+       sudo apt-get install -y libgtk-3-dev libglib2.0-dev libpango1.0-dev
+       sudo apt-get install -y libatk1.0-dev libcairo-gobject2 libgdk-pixbuf2.0-dev
+       sudo apt-get install -y libgraphene-1.0-dev libharfbuzz-dev
+   ```
+
+2. **检查包名**：
+   - 某些包在不同Ubuntu版本中名称不同
+   - 使用 `apt-cache search <关键词>` 查找正确的包名
+
+3. **更新包索引**：
+   ```yaml
+   - name: Update package index
+     run: sudo apt-get update --fix-missing
+   ```
+
+4. **使用不同的包管理器**（如果可用）：
+   ```yaml
+   - name: Install dependencies with apt-fast
+     run: |
+       sudo apt-get install -y apt-fast
+       sudo apt-fast install -y <packages>
+   ```
 
 #### 7. Artifact 下载失败
 
