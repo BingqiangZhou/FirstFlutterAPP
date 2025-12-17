@@ -881,12 +881,14 @@ jobs:
 
 2. **条件语句语法错误**
    ```yaml
-   # 错误
-   if: ${{ secrets.VAR != '' }}
-
-   # 正确
+   # 错误（直接引用secrets）
    if: secrets.VAR != ''
+
+   # 正确（使用表达式语法）
+   if: ${{ secrets.VAR != '' }}
    ```
+
+   **说明**：在条件语句中使用secrets时，必须使用 `${{ }}` 表达式语法。这是GitHub Actions的要求。
 
 3. **空的环境变量块**
    ```yaml
